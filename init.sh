@@ -171,6 +171,11 @@ if [[ -n "$_conflict" ]]; then
     apt-get remove -y $_conflict || true
 fi
 
+# 清理旧的 Docker 源文件和 GPG key（避免 Signed-By 冲突）
+log "清理旧的 Docker 源文件"
+rm -f /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.sources
+rm -f /etc/apt/keyrings/docker.gpg /etc/apt/keyrings/docker.asc
+
 # 添加 Docker 官方 GPG key
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL "${DOCKER_URL}/gpg" -o /etc/apt/keyrings/docker.asc
