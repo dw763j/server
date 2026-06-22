@@ -286,9 +286,13 @@ if [[ -z "$SSH_PORT" ]]; then
 fi
 log "SSH 端口：$SSH_PORT（ufw 将放行该端口）"
 
-ufw --force reset >/dev/null
-ufw default deny incoming
-ufw default allow outgoing
+# 仅添加规则，不重置已有规则
+# 如果是首次启用 ufw 才设置默认策略
+if ! ufw status | grep -q "^Status: active"; then
+    ufw default deny incoming
+    ufw default allow outgoing
+fi
+
 ufw allow "${SSH_PORT}/tcp" comment 'SSH'
 ufw allow 80/tcp   comment 'Caddy HTTP'
 ufw allow 443/tcp  comment 'Caddy HTTPS'
