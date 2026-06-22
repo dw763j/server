@@ -259,9 +259,26 @@ ok "journald 日志大小限制已配置为 ${JOURNAL_MAX_USE}"
 #==============================================================
 step "9/9 配置 ufw 与 fail2ban"
 
-# fail2ban：启用并启动（Debian/Ubuntu 默认已启用 sshd jail）
+# fail2ban：检测 sshd 日志来源，配置正确的 backend
+step "9/9 配置 ufw 与 fail2ban"
+
+log "检测 sshd 日志来源..."
+# 现代 Debian/Ubuntu sshd 默认只写 journald，fail2ban 默认从 /var/log/auth.log
+# 读日志，两者不匹配会导致 sshd jail 失效。这里自动检测并写入 /etc/fail2ban/jail.local。
+if journalctl -u ssh --no-pager -n 1 &>/dev/null; then
+    log "sshd 日志来自 journald，配置 fail2ban backend = systemd"
+    cat > /etc/fail2ban/jail.local <<'FAIL2BAN_EOF'
+# 由 init.sh 生成 —— 从 systemd journal 读取 sshd 日志
+[sshd]
+backend = systemd
+enabled = true
+FAIL2BAN_EOF
+else
+    log "sshd 日志来自 syslog/auth.log，使用 fail2ban 默认 backend (auto)"
+fi
+
 systemctl enable --now fail2ban
-ok "fail2ban 已启用（默认 sshd 防护）"
+ok "fail2ban 已启用（sshd 防护）"
 
 # 自动检测 SSH 端口，避免 ufw 启用后自锁
 if [[ -z "$SSH_PORT" ]]; then
@@ -275,12 +292,13 @@ ufw --force reset >/dev/null
 ufw default deny incoming
 ufw default allow outgoing
 ufw allow "${SSH_PORT}/tcp" comment 'SSH'
-ufw allow 80/tcp comment 'Caddy HTTP'
-ufw allow 443/tcp comment 'Caddy HTTPS'
+ufw allow 80/tcp   comment 'Caddy HTTP'
+ufw allow 443/tcp  comment 'Caddy HTTPS'
+ufw allow 443/udp  comment 'Hysteria 2 QUIC'
 
 if [[ "${ENABLE_UFW}" == "true" ]]; then
     ufw --force enable
-    ok "ufw 已启用（已放行 SSH ${SSH_PORT}/tcp、80/tcp、443/tcp）"
+    ok "ufw 已启用（已放行 SSH ${SSH_PORT}/tcp、80/tcp、443/tcp、443/udp）"
 else
     warn "ENABLE_UFW=false，ufw 规则已配置但未启用；准备好后运行：ufw enable"
 fi
@@ -301,7 +319,7 @@ ${C_YELLOW}后续提醒：${C_RESET}
   1. Docker：若已加入 docker 组，请重新登录以免 sudo 使用 docker。
   2. Hysteria 2：编辑 /etc/hysteria/config.yaml 后
         systemctl restart hysteria-server
-     并在 ufw 放行对应端口，例如：ufw allow <端口>/udp
+     （443/udp 已在 ufw 放行，如果用其他端口需自行放行）
   3. Xray：编辑 /usr/local/etc/xray/config.json 后
         systemctl restart xray
      并在 ufw 放行对应端口。
