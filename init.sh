@@ -260,8 +260,6 @@ ok "journald 日志大小限制已配置为 ${JOURNAL_MAX_USE}"
 step "9/9 配置 ufw 与 fail2ban"
 
 # fail2ban：检测 sshd 日志来源，配置正确的 backend
-step "9/9 配置 ufw 与 fail2ban"
-
 log "检测 sshd 日志来源..."
 # 现代 Debian/Ubuntu sshd 默认只写 journald，fail2ban 默认从 /var/log/auth.log
 # 读日志，两者不匹配会导致 sshd jail 失效。这里自动检测并写入 /etc/fail2ban/jail.local。
