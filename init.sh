@@ -222,7 +222,7 @@ ok "Hysteria 2 安装完成"
 step "6/9 安装 Xray（官方脚本）"
 curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh \
     -o /tmp/xray_install.sh || die "下载 Xray 安装脚本失败"
-bash /tmp/xray_install.sh @ install || die "Xray 安装失败"
+bash /tmp/xray_install.sh install || die "Xray 安装失败"
 rm -f /tmp/xray_install.sh
 ok "Xray 安装完成"
 
