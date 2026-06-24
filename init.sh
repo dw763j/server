@@ -16,6 +16,7 @@
 #      https://caddyserver.com/docs/install#debian-ubuntu-raspbian
 #   8. 配置 journald 最大日志大小为 500M
 #   9. 配置 ufw 防火墙与 fail2ban
+#   10. 安装 wgcf（Cloudflare WARP）→ register → generate
 #
 # 用法（以 root 运行）：
 #   sudo bash init.sh
@@ -24,6 +25,7 @@
 #   SSH_PORT=22           指定 SSH 端口（留空则自动读取 sshd_config，默认 22）
 #   ENABLE_UFW=true       是否启用 ufw（已先放行 SSH/80/443，避免自锁）
 #   INSTALL_OHMYZSH=true  是否为调用用户安装 Oh My Zsh（默认 true）
+#   INSTALL_WGCF=true     是否安装 wgcf（Cloudflare WARP）（默认 true）
 #   JOURNAL_MAX_USE=500M  journald 最大日志大小
 # 例如：
 #   sudo SSH_PORT=2222 bash init.sh
@@ -37,6 +39,7 @@ set -euo pipefail
 SSH_PORT="${SSH_PORT:-}"                    # 留空则自动检测 sshd 端口，默认 22
 ENABLE_UFW="${ENABLE_UFW:-true}"            # 是否启用 ufw 防火墙
 INSTALL_OHMYZSH="${INSTALL_OHMYZSH:-true}"  # 是否为调用用户安装 Oh My Zsh
+INSTALL_WGCF="${INSTALL_WGCF:-true}"        # 是否安装 wgcf（Cloudflare WARP）
 JOURNAL_MAX_USE="${JOURNAL_MAX_USE:-500M}"  # journald 最大日志大小
 
 #==============================================================
@@ -93,14 +96,14 @@ log "检测到系统：$OS_ID ${VERSION_CODENAME_VAL:-} ($ARCH)，Docker suite=$
 #==============================================================
 # 1. apt update / upgrade
 #==============================================================
-step "1/9 更新软件包索引并升级系统"
+step "1/10 更新软件包索引并升级系统"
 apt-get update -y
 apt-get upgrade -y
 
 #==============================================================
 # 2. 安装基础软件
 #==============================================================
-step "2/9 安装基础软件"
+step "2/10 安装基础软件"
 BASE_PACKAGES=(
     ufw fail2ban curl wget htop vim zsh git net-tools dnsutils
     ca-certificates gnupg apt-transport-https        # 后续添加第三方源所需
@@ -121,7 +124,7 @@ if [[ "${INSTALL_OHMYZSH}" == "true" ]]; then
         _home="$(getent passwd "${_ohmyzsh_target}" | cut -d: -f6)"
     fi
 
-    step "3/9 为 ${_ohmyzsh_target} 安装 Oh My Zsh（家目录：${_home}）"
+    step "3/10 为 ${_ohmyzsh_target} 安装 Oh My Zsh（家目录：${_home}）"
 
     if [[ ! -d "${_home}/.oh-my-zsh" ]]; then
         if [[ "${_ohmyzsh_target}" == "root" ]]; then
@@ -159,7 +162,7 @@ fi
 #==============================================================
 # 3. 安装 Docker（官方 apt 仓库）
 #==============================================================
-step "4/9 安装 Docker（官方 apt 仓库）"
+step "4/10 安装 Docker（官方 apt 仓库）"
 
 # 移除可能冲突的旧版本包（与官方文档一致）
 log "检查并移除可能冲突的旧版本 Docker 相关包"
@@ -209,7 +212,7 @@ fi
 #==============================================================
 # 4. 安装 Hysteria 2（官方脚本）
 #==============================================================
-step "5/9 安装 Hysteria 2（官方脚本）"
+step "5/10 安装 Hysteria 2（官方脚本）"
 curl -fsSL https://get.hy2.sh/ -o /tmp/hy2_install.sh \
     || die "下载 Hysteria 2 安装脚本失败"
 bash /tmp/hy2_install.sh || die "Hysteria 2 安装失败"
@@ -219,7 +222,7 @@ ok "Hysteria 2 安装完成"
 #==============================================================
 # 5. 安装 Xray（官方脚本）
 #==============================================================
-step "6/9 安装 Xray（官方脚本）"
+step "6/10 安装 Xray（官方脚本）"
 curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh \
     -o /tmp/xray_install.sh || die "下载 Xray 安装脚本失败"
 bash /tmp/xray_install.sh install || die "Xray 安装失败"
@@ -229,7 +232,7 @@ ok "Xray 安装完成"
 #==============================================================
 # 6. 安装 Caddy（官方 apt 仓库）
 #==============================================================
-step "7/9 安装 Caddy（官方 apt 仓库）"
+step "7/10 安装 Caddy（官方 apt 仓库）"
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
     | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
@@ -243,7 +246,7 @@ ok "Caddy 安装完成"
 #==============================================================
 # 7. 配置 journald 日志大小限制
 #==============================================================
-step "8/9 配置 journald 最大日志大小为 ${JOURNAL_MAX_USE}"
+step "8/10 配置 journald 最大日志大小为 ${JOURNAL_MAX_USE}"
 install -d -m 0755 /etc/systemd/journald.conf.d
 cat > /etc/systemd/journald.conf.d/size-limit.conf <<EOF
 # 由 init.sh 生成 —— 限制 journal 最大占用
@@ -257,7 +260,7 @@ ok "journald 日志大小限制已配置为 ${JOURNAL_MAX_USE}"
 #==============================================================
 # 8. 配置 ufw 与 fail2ban
 #==============================================================
-step "9/9 配置 ufw 与 fail2ban"
+step "9/10 配置 ufw 与 fail2ban"
 
 # fail2ban：检测 sshd 日志来源，配置正确的 backend
 log "检测 sshd 日志来源..."
@@ -306,6 +309,50 @@ else
 fi
 
 #==============================================================
+# 10. 安装 wgcf（WARP 客户端，Cloudflare WARP 转 WireGuard）
+#==============================================================
+if [[ "${INSTALL_WGCF}" == "true" ]]; then
+    step "10/10 安装 wgcf（Cloudflare WARP）"
+
+    # 映射 dpkg 架构到 wgcf 命名
+    case "$ARCH" in
+        amd64)  WGCF_ARCH="amd64"  ;;
+        arm64)  WGCF_ARCH="arm64"  ;;
+        *)      warn "wgcf 不支持该架构：$ARCH，跳过安装"
+                WGCF_ARCH="" ;;
+    esac
+
+    if [[ -n "$WGCF_ARCH" ]]; then
+        # 通过 GitHub API 获取最新版本号
+        WGCF_VERSION=$(curl -fsSL https://api.github.com/repos/ViRb3/wgcf/releases/latest \
+            | grep -oP '"tag_name":\s*"\K[^"]+' || true)
+        if [[ -z "$WGCF_VERSION" ]]; then
+            warn "无法获取 wgcf 最新版本，跳过安装"
+        else
+            WGCF_DOWNLOAD_URL="https://github.com/ViRb3/wgcf/releases/download/${WGCF_VERSION}/wgcf_${WGCF_VERSION}_linux_${WGCF_ARCH}"
+            log "下载 wgcf ${WGCF_VERSION} (linux/${WGCF_ARCH})..."
+            curl -fsSL "$WGCF_DOWNLOAD_URL" -o /usr/local/bin/wgcf \
+                || die "下载 wgcf 失败"
+            chmod +x /usr/local/bin/wgcf
+            ok "wgcf 已安装到 /usr/local/bin/wgcf"
+
+            # 注册并生成 WireGuard 配置
+            log "运行 wgcf register --accept-tos..."
+            wgcf register --accept-tos || warn "wgcf register 失败（已继续）"
+
+            log "运行 wgcf generate..."
+            wgcf generate || warn "wgcf generate 失败（已继续）"
+
+            if [[ -f wgcf-profile.conf ]]; then
+                ok "wgcf-profile.conf 已生成于当前目录 $(pwd)/wgcf-profile.conf"
+            fi
+        fi
+    fi
+else
+    warn "INSTALL_WGCF=false，跳过 wgcf 安装"
+fi
+
+#==============================================================
 # 收尾清理
 #==============================================================
 apt-get autoremove -y || true
@@ -329,4 +376,5 @@ ${C_YELLOW}后续提醒：${C_RESET}
      （80/443 端口已在 ufw 放行）。
   5. fail2ban：默认启用 sshd 防护，可在 /etc/fail2ban/jail.local 自定义。
   6. Oh My Zsh：已安装，重新登录后自动生效。配置文件 ~/.zshrc
+  7. wgcf：已安装，配置文件 wgcf-profile.conf 在 $(pwd)/，可接入 WireGuard 使用。
 EOF
