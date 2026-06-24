@@ -221,7 +221,15 @@ chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 chmod o+r /etc/apt/sources.list.d/caddy-stable.list
 apt-get update -y
 apt-get install -y caddy
-ok "Caddy 安装完成"
+
+# 替换为带 Cloudflare DNS 模块的 Caddy 二进制
+log "下载带 Cloudflare DNS 模块的 Caddy..."
+CADDY_DOWNLOAD_URL="https://caddyserver.com/api/download?os=linux&arch=${ARCH}&p=github.com%2Fcaddy-dns%2Fcloudflare&idempotency=$(date +%s%N)"
+curl -fsSL "$CADDY_DOWNLOAD_URL" -o /usr/bin/caddy \
+    || warn "下载 Cloudflare DNS 版 Caddy 失败，保留 apt 版本"
+chmod +x /usr/bin/caddy
+systemctl restart caddy 2>/dev/null || true
+ok "Caddy 安装完成（已替换为 Cloudflare DNS 版）"
 
 #==============================================================
 # 6. 安装 Xray（官方脚本，以 caddy:caddy 运行）
