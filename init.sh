@@ -8,12 +8,12 @@
 #   3. 安装 Oh My Zsh（调用用户 或 root）+ 设置默认 shell 为 zsh
 #   4. 安装 Docker（官方 apt 仓库）
 #      https://docs.docker.com/engine/install/ubuntu/  或  /debian/
-#   5. 安装 Hysteria 2（官方脚本）
-#      https://v2.hysteria.network/zh/docs/getting-started/Installation/
-#   6. 安装 Xray（官方脚本）
-#      https://github.com/XTLS/Xray-install
-#   7. 安装 Caddy（官方 apt 仓库）
+#   5. 安装 Caddy（官方 apt 仓库）
 #      https://caddyserver.com/docs/install#debian-ubuntu-raspbian
+#   6. 安装 Xray（官方脚本，以 caddy:caddy 用户运行）
+#      https://github.com/XTLS/Xray-install
+#   7. 安装 Hysteria 2（官方脚本）
+#      https://v2.hysteria.network/zh/docs/getting-started/Installation/
 #   8. 配置 journald 最大日志大小为 500M
 #   9. 配置 ufw 防火墙与 fail2ban
 #   10. 安装 wgcf（Cloudflare WARP）→ register → generate
@@ -96,14 +96,14 @@ log "检测到系统：$OS_ID ${VERSION_CODENAME_VAL:-} ($ARCH)，Docker suite=$
 #==============================================================
 # 1. apt update / upgrade
 #==============================================================
-step "1/10 更新软件包索引并升级系统"
+step "1/11 更新软件包索引并升级系统"
 apt-get update -y
 apt-get upgrade -y
 
 #==============================================================
 # 2. 安装基础软件
 #==============================================================
-step "2/10 安装基础软件"
+step "2/11 安装基础软件"
 BASE_PACKAGES=(
     ufw fail2ban curl wget htop vim zsh git net-tools dnsutils
     ca-certificates gnupg apt-transport-https        # 后续添加第三方源所需
@@ -124,7 +124,7 @@ if [[ "${INSTALL_OHMYZSH}" == "true" ]]; then
         _home="$(getent passwd "${_ohmyzsh_target}" | cut -d: -f6)"
     fi
 
-    step "3/10 为 ${_ohmyzsh_target} 安装 Oh My Zsh（家目录：${_home}）"
+    step "3/11 为 ${_ohmyzsh_target} 安装 Oh My Zsh（家目录：${_home}）"
 
     if [[ ! -d "${_home}/.oh-my-zsh" ]]; then
         if [[ "${_ohmyzsh_target}" == "root" ]]; then
@@ -162,7 +162,7 @@ fi
 #==============================================================
 # 3. 安装 Docker（官方 apt 仓库）
 #==============================================================
-step "4/10 安装 Docker（官方 apt 仓库）"
+step "4/11 安装 Docker（官方 apt 仓库）"
 
 # 移除可能冲突的旧版本包（与官方文档一致）
 log "检查并移除可能冲突的旧版本 Docker 相关包"
@@ -210,29 +210,9 @@ if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
 fi
 
 #==============================================================
-# 4. 安装 Hysteria 2（官方脚本）
+# 5. 安装 Caddy（官方 apt 仓库）—— 先于 Xray，Xray 需要 caddy 用户
 #==============================================================
-step "5/10 安装 Hysteria 2（官方脚本）"
-curl -fsSL https://get.hy2.sh/ -o /tmp/hy2_install.sh \
-    || die "下载 Hysteria 2 安装脚本失败"
-bash /tmp/hy2_install.sh || die "Hysteria 2 安装失败"
-rm -f /tmp/hy2_install.sh
-ok "Hysteria 2 安装完成"
-
-#==============================================================
-# 5. 安装 Xray（官方脚本）
-#==============================================================
-step "6/10 安装 Xray（官方脚本）"
-curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh \
-    -o /tmp/xray_install.sh || die "下载 Xray 安装脚本失败"
-bash /tmp/xray_install.sh install || die "Xray 安装失败"
-rm -f /tmp/xray_install.sh
-ok "Xray 安装完成"
-
-#==============================================================
-# 6. 安装 Caddy（官方 apt 仓库）
-#==============================================================
-step "7/10 安装 Caddy（官方 apt 仓库）"
+step "5/11 安装 Caddy（官方 apt 仓库）"
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
     | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
@@ -244,9 +224,42 @@ apt-get install -y caddy
 ok "Caddy 安装完成"
 
 #==============================================================
-# 7. 配置 journald 日志大小限制
+# 6. 安装 Xray（官方脚本，以 caddy:caddy 运行）
 #==============================================================
-step "8/10 配置 journald 最大日志大小为 ${JOURNAL_MAX_USE}"
+step "6/11 安装 Xray（官方脚本）"
+curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh \
+    -o /tmp/xray_install.sh || die "下载 Xray 安装脚本失败"
+bash /tmp/xray_install.sh install || die "Xray 安装失败"
+rm -f /tmp/xray_install.sh
+
+# 以 caddy:caddy 用户运行，共享端口监听权限
+log "修改 Xray 以 caddy:caddy 用户运行..."
+sed -i 's/^User=.*/User=caddy/'   /etc/systemd/system/xray.service
+sed -i 's/^Group=.*/Group=caddy/' /etc/systemd/system/xray.service || true
+# 确保配置目录权限且配置文件仅 caddy 可读写
+chown -R caddy:caddy /usr/local/etc/xray /usr/local/share/xray 2>/dev/null || true
+chown caddy:caddy /var/log/xray 2>/dev/null || true
+if [[ -f /usr/local/etc/xray/config.json ]]; then
+    chown caddy:caddy /usr/local/etc/xray/config.json
+    chmod 600 /usr/local/etc/xray/config.json
+fi
+systemctl daemon-reload
+ok "Xray 安装完成，已配置为 caddy:caddy 运行"
+
+#==============================================================
+# 7. 安装 Hysteria 2（官方脚本）
+#==============================================================
+step "7/11 安装 Hysteria 2（官方脚本）"
+curl -fsSL https://get.hy2.sh/ -o /tmp/hy2_install.sh \
+    || die "下载 Hysteria 2 安装脚本失败"
+bash /tmp/hy2_install.sh || die "Hysteria 2 安装失败"
+rm -f /tmp/hy2_install.sh
+ok "Hysteria 2 安装完成"
+
+#==============================================================
+# 8. 配置 journald 日志大小限制
+#==============================================================
+step "8/11 配置 journald 最大日志大小为 ${JOURNAL_MAX_USE}"
 install -d -m 0755 /etc/systemd/journald.conf.d
 cat > /etc/systemd/journald.conf.d/size-limit.conf <<EOF
 # 由 init.sh 生成 —— 限制 journal 最大占用
@@ -260,7 +273,7 @@ ok "journald 日志大小限制已配置为 ${JOURNAL_MAX_USE}"
 #==============================================================
 # 8. 配置 ufw 与 fail2ban
 #==============================================================
-step "9/10 配置 ufw 与 fail2ban"
+step "9/11 配置 ufw 与 fail2ban"
 
 # fail2ban：检测 sshd 日志来源，配置正确的 backend
 log "检测 sshd 日志来源..."
@@ -312,7 +325,7 @@ fi
 # 10. 安装 wgcf（WARP 客户端，Cloudflare WARP 转 WireGuard）
 #==============================================================
 if [[ "${INSTALL_WGCF}" == "true" ]]; then
-    step "10/10 安装 wgcf（Cloudflare WARP）"
+    step "10/11 安装 wgcf（Cloudflare WARP）"
 
     # 映射 dpkg 架构到 wgcf 命名
     case "$ARCH" in
